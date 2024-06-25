@@ -1,4 +1,3 @@
-
 import Foundation
 import Cocoa
 import simd
@@ -11,11 +10,11 @@ class Shape {
     static let sideCount = 28
     static let vertexDataLength = MemoryLayout<SIMD2<Float>>.stride * 3 * sideCount
     static let instanceDataLength = MemoryLayout<SIMD2<Float>>.stride + MemoryLayout<Float>.stride + MemoryLayout<SIMD3<Float>>.stride
-    
+
     var position: SIMD2<Float>
     var velocity: SIMD2<Float>
     var radius: Float
-    var color: SIMD3<Float>
+    var color: SIMD3<Float> // RGB(aなし)
     
     init(sceneSize: SIMD2<Float>) {
         position = SIMD2<Float>(Float.random(in: 0.0..<sceneSize.x), Float.random(in: 0.0..<sceneSize.y))
@@ -26,19 +25,16 @@ class Shape {
 
         radius = Float.random(in: 16.0...64.0)
         
-        let nsColor = NSColor(calibratedHue: CGFloat(randomInRange(0, 1)),
-                              saturation: 0.7,
-                              brightness: 1.0,
-                              alpha: 1.0)
-        var r: CGFloat = 0.0; var g: CGFloat = 0.0; var b: CGFloat = 0.0
-        nsColor.getRed(&r, green: &g, blue: &b, alpha: nil)
+        let nsColor = NSColor(calibratedHue: CGFloat(randomInRange(0, 1)), saturation: 0.7, brightness: 1.0, alpha: 1.0)
+        var r: CGFloat = 0.0
+        var g: CGFloat = 0.0
+        var b: CGFloat = 0.0
+        nsColor.getRed(&r, green: &g, blue: &b, alpha: nil) // aはnil
         color = SIMD3<Float>(Float(r), Float(g), Float(b))
     }
     
     static func copyVertexData(to buffer: MTLBuffer) {
-        let positionData = buffer.contents().bindMemory(to: Float.self,
-                                                        capacity: self.vertexDataLength / 4)
-        
+        let positionData = buffer.contents().bindMemory(to: Float.self, capacity: self.vertexDataLength / 4)
         let deltaTheta = (Float.pi * 2) / Float(sideCount)
         var i = 0
         for t in 0..<sideCount {
@@ -97,9 +93,8 @@ class Scene {
     }
     
     func copyInstanceData(to buffer: MTLBuffer) {
-        let instanceData = buffer.contents().bindMemory(to: Float.self,
-                                                        capacity: Shape.instanceDataLength / 4 * shapes.count)
-        
+        let instanceData = buffer.contents().bindMemory(to: Float.self, capacity: Shape.instanceDataLength / 4 * shapes.count)
+
         var i = 0
         for s in shapes {
             instanceData[i] = s.position.x; i += 1
@@ -108,6 +103,7 @@ class Scene {
             instanceData[i] = s.color.x; i += 1
             instanceData[i] = s.color.y; i += 1
             instanceData[i] = s.color.z; i += 1
+            // colorはaなし
         }
     }
 }

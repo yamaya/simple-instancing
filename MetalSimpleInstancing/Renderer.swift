@@ -1,4 +1,3 @@
-
 import Foundation
 import MetalKit
 
@@ -39,7 +38,7 @@ class Renderer : NSObject, MTKViewDelegate {
         self.view = view
         self.device = device
         commandQueue = device.makeCommandQueue()!
-        
+
         super.init()
 
         self.view.delegate = self
@@ -59,7 +58,15 @@ class Renderer : NSObject, MTKViewDelegate {
         renderPipelineDescriptor.fragmentFunction = fragmentFunction
         renderPipelineDescriptor.rasterSampleCount = view.sampleCount
         renderPipelineDescriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat
-
+        if ENABLE_BLEND == 1 {
+            renderPipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
+            renderPipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
+            renderPipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
+            renderPipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+            renderPipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
+            renderPipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .one
+            renderPipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .one
+        }
         if USE_VERTEX_DESCRIPTOR == 1 {
             let vertexDescriptor = MTLVertexDescriptor()
             vertexDescriptor.attributes[0].format = .float2 // vertex position
@@ -94,7 +101,7 @@ class Renderer : NSObject, MTKViewDelegate {
     
     func makeResources() {
         let size = SIMD2<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height))
-        
+
         scene = Scene(sceneSize: size, shapeCount: 128)
         
         vertexBuffer = device.makeBuffer(length: Shape.vertexDataLength, options: [.storageModeShared])
@@ -102,9 +109,7 @@ class Renderer : NSObject, MTKViewDelegate {
         
         instanceBuffers = []
         for _ in 0..<Renderer.maxFramesInFlight {
-            if let buffer = device.makeBuffer(length: Shape.instanceDataLength * scene.shapes.count,
-                                              options: [.storageModeShared])
-            {
+            if let buffer = device.makeBuffer(length: Shape.instanceDataLength * scene.shapes.count, options: [.storageModeShared]) {
                 instanceBuffers.append(buffer)
             }
         }
@@ -119,38 +124,29 @@ class Renderer : NSObject, MTKViewDelegate {
         frameSemaphore.wait()
         
         scene.update(with: TimeInterval(1 / 60.0))
-        
+
         scene.copyInstanceData(to: instanceBuffers[frameIndex])
-        
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        defer {
-            commandBuffer.commit()
-        }
-        
-        guard let renderPassDescriptor = view.currentRenderPassDescriptor else { return }
-        
-        let renderCommandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
-        
-        renderCommandEncoder.setRenderPipelineState(renderPipelineState)
-        
-        renderCommandEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
-        renderCommandEncoder.setVertexBuffer(instanceBuffers[frameIndex], offset: 0, index: 1)
-        
+
         var projectionMatrix = simd_float4x4(orthographicProjectionWithLeft: 0.0,
                                              top: 0.0,
                                              right: Float(view.drawableSize.width),
                                              bottom: Float(view.drawableSize.height),
                                              near: 0.0,
                                              far: 1.0)
+
+        let commandBuffer = commandQueue.makeCommandBuffer()!
+        defer {
+            commandBuffer.commit()
+        }
+        guard let renderPassDescriptor = view.currentRenderPassDescriptor else { return }
+        let renderCommandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
+        renderCommandEncoder.setRenderPipelineState(renderPipelineState)
+        renderCommandEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        renderCommandEncoder.setVertexBuffer(instanceBuffers[frameIndex], offset: 0, index: 1)
         renderCommandEncoder.setVertexBytes(&projectionMatrix, length: MemoryLayout.size(ofValue: projectionMatrix), index: 2)
-        
-        renderCommandEncoder.drawPrimitives(type: .triangle,
-                                            vertexStart: 0,
-                                            vertexCount: Shape.sideCount * 3,
-                                            instanceCount: scene.shapes.count)
-        
+        renderCommandEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: Shape.sideCount * 3, instanceCount: scene.shapes.count)
         renderCommandEncoder.endEncoding()
-        
+
         view.currentDrawable!.present()
         
         commandBuffer.addCompletedHandler { _ in
