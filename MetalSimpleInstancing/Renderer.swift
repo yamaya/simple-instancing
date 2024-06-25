@@ -18,12 +18,12 @@ extension simd_float4x4 {
 
 class Renderer : NSObject, MTKViewDelegate {
     static let maxFramesInFlight = 3
-    
+
     let view: MTKView
     let device: MTLDevice
     let commandQueue: MTLCommandQueue!
     let frameSemaphore = DispatchSemaphore(value: Renderer.maxFramesInFlight)
-    
+
     var renderPipelineState: MTLRenderPipelineState!
     var vertexBuffer: MTLBuffer!
     var instanceBuffers: [MTLBuffer] = []
@@ -34,7 +34,7 @@ class Renderer : NSObject, MTKViewDelegate {
         guard let device = view.device else {
             fatalError("MTKView should be configured with a device before creating a renderer")
         }
-        
+
         self.view = view
         self.device = device
         commandQueue = device.makeCommandQueue()!
@@ -46,13 +46,13 @@ class Renderer : NSObject, MTKViewDelegate {
         makePipeline()
         makeResources()
     }
-    
+
     func makePipeline() {
         let library = device.makeDefaultLibrary()!
-        
+
         let vertexFunction = library.makeFunction(name: "vertex_main")
         let fragmentFunction = library.makeFunction(name: "fragment_main")
-        
+
         let renderPipelineDescriptor = MTLRenderPipelineDescriptor()
         renderPipelineDescriptor.vertexFunction = vertexFunction
         renderPipelineDescriptor.fragmentFunction = fragmentFunction
@@ -63,9 +63,9 @@ class Renderer : NSObject, MTKViewDelegate {
             renderPipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
             renderPipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
             renderPipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
-            renderPipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
-            renderPipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .one
-            renderPipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .one
+            renderPipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
+            renderPipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusBlendAlpha
+            renderPipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         }
         if USE_VERTEX_DESCRIPTOR == 1 {
             let vertexDescriptor = MTLVertexDescriptor()
@@ -98,15 +98,15 @@ class Renderer : NSObject, MTKViewDelegate {
 
         renderPipelineState = try! device.makeRenderPipelineState(descriptor: renderPipelineDescriptor)
     }
-    
+
     func makeResources() {
         let size = SIMD2<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height))
 
         scene = Scene(sceneSize: size, shapeCount: 128)
-        
+
         vertexBuffer = device.makeBuffer(length: Shape.vertexDataLength, options: [.storageModeShared])
         Shape.copyVertexData(to: vertexBuffer)
-        
+
         instanceBuffers = []
         for _ in 0..<Renderer.maxFramesInFlight {
             if let buffer = device.makeBuffer(length: Shape.instanceDataLength * scene.shapes.count, options: [.storageModeShared]) {
@@ -114,15 +114,15 @@ class Renderer : NSObject, MTKViewDelegate {
             }
         }
     }
-    
+
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         makeResources()
         frameIndex = 0
     }
-    
+
     func draw(in view: MTKView) {
         frameSemaphore.wait()
-        
+
         scene.update(with: TimeInterval(1 / 60.0))
 
         scene.copyInstanceData(to: instanceBuffers[frameIndex])
@@ -148,11 +148,11 @@ class Renderer : NSObject, MTKViewDelegate {
         renderCommandEncoder.endEncoding()
 
         view.currentDrawable!.present()
-        
+
         commandBuffer.addCompletedHandler { _ in
             self.frameSemaphore.signal()
         }
-        
+
         frameIndex = (frameIndex + 1) % Renderer.maxFramesInFlight
     }
 }
